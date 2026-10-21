@@ -1,6 +1,6 @@
 {
   "name": "linkedin-unipile",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Publish LinkedIn posts and fetch all comments and replies through Unipile.",
   "author": { "name": "Rohit" },
   "keywords": ["linkedin", "unipile", "comments", "posts"]

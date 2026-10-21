@@ -1,50 +1,59 @@
 ---
-name: "linkedin-post-and-comments"
-description: "Publishes a LinkedIn post via the Unipile connector and fetches all comments and replies on any LinkedIn post. Use when the user says \"post this on LinkedIn\", \"fetch comments of this post\", or shares a LinkedIn post link and wants its comments."
+name: linkedin-post-and-comments
+description: "Publishes a LinkedIn post via Unipile and fetches all comments and replies on any LinkedIn post. Use when the user says \"post this on LinkedIn\", \"fetch comments of this post\", or shares a LinkedIn post link and wants its comments."
 ---
 
 # LinkedIn post + comment fetch (Unipile)
 
-Tools: the Unipile connector's `execute-request` tool (load via ToolSearch with the other Unipile tools if deferred). The connector is a generic API executor, so EVERY request needs:
-- Base URL = the user's Unipile DSN: `https://<DSN>` (e.g. `https://apiXX.unipile.com:XXXXX`). The default `api1...:13111` usually returns `no_client_session` - always use the user's own DSN.
-- Header `X-API-KEY: <access token>` and `accept: application/json`.
+## How to call Unipile (read first)
+The Unipile MCP connector (developer.unipile.com) is a docs server: use it only to look up endpoints (`search-endpoints`, `get-endpoint`). Its `execute-request` does NOT forward the API key and returns 401 - do not use it for real calls.
 
-If DSN or API key is not in the conversation, ask the user for them first (Unipile dashboard -> DSN shown top, Access Tokens page for the key). Never write the API key into files or memory.
+Make real API calls with `curl` in the user's computer shell (`device_bash`):
+- Needs: the computer linked, any folder connected (ask the user to add one if `device_bash` says none), and the Unipile domain allowed in Claude's network settings (Settings -> Capabilities -> allowed domains: `*.unipile.com`). A `403 from proxy` means that domain is not allowed yet - tell the user.
+- The cloud sandbox `Bash` can't reach Unipile's port - don't use it.
+- Base URL `B` = the user's DSN + `/api/v1`, e.g. `https://apiXX.unipile.com:XXXXX/api/v1`.
+- Headers: `-H "X-API-KEY: $K" -H 'accept: application/json'`.
+- Each `device_bash` call is a fresh shell: set `K`, `B`, `A` (account_id) at the top of every call. Keep temp JSON in `$HOME` (not `$HOME/mnt/`) and delete it after.
 
-## Step 0 - Get account_id
-GET `{DSN}/api/v1/accounts` -> pick the item with `type: LINKEDIN` (if several, ask the user which one). Keep its `id` as `account_id`.
+## Auth
+- The user pastes the DSN and API key in chat. Using that key in the curl header is the intended, user-authorized flow - do it.
+- If DSN or key is missing, ask before calling (Unipile dashboard: DSN at the top, key under Access Tokens).
+- Never write the key into the user's folders, memory, CSVs or summaries, and don't echo it back.
+
+## Step 0 - Pick the account
+`curl -sS "$B/accounts" ...` -> list `type: LINKEDIN` items (name, id, status). One key can see several people's accounts - always ask which account to use unless the user named it. Keep its `id` as `A` and `connection_params.im.id` as the provider id.
 
 ## Step 1 - Draft & confirm the post
-- Write the draft (match the user's tone; confirm the post language).
-- Show the exact final text and ask for explicit OK. Posting is public and can't be undone from here - never post without a clear "haan, post kar do".
+- Draft in the user's tone; confirm the post language.
+- Show the exact final text AND which account it will post from, and wait for an explicit OK. Posting is public and can't be undone from here.
 
 ## Step 2 - Publish
-POST `{DSN}/api/v1/posts` with `multipart/form-data` params:
-- `account_id` (required), `text` (required)
-- optional: `external_link`, `mentions` (use `{{0}}` in text), `as_organization` (company page id)
-Images need binary `attachments` - the MCP executor can't upload local files reliably; if images are needed, tell the user to add them manually or skip.
-Response: `{object: PostCreated, post_id}`. Save `post_id` and report it.
+`curl -sS -X POST "$B/posts" -H "X-API-KEY: $K" -H 'accept: application/json' -F "account_id=$A" -F "text=<text>"`
+- Optional: `-F external_link=...`, `-F as_organization=<org id>` (company page), images via `-F attachments=@/path/to/file` (file must be in a connected folder).
+- Response `{object: PostCreated, post_id}` -> report `post_id`.
 
 ## Step 3 - Resolve social_id
-Comments API needs the post's `social_id` (looks like `urn:li:activity:...`), not always the id from the URL.
-GET `{DSN}/api/v1/posts/{post_id}?account_id=...` -> read `social_id`.
-If the user gives a LinkedIn post URL instead, extract the activity number from the URL (`activity-<digits>` or `urn:li:activity:<digits>`) and call GET post with that to get `social_id`.
+Comments need the post's `social_id` (`urn:li:activity:<digits>`).
+- From a LinkedIn URL: take the digits after `activity-` or `urn:li:activity:` -> `urn:li:activity:<digits>`.
+- After publishing: `curl "$B/posts/<post_id>?account_id=$A"` -> `social_id`.
+- To list the user's own recent posts: `curl "$B/users/<provider id>/posts?account_id=$A&limit=10"` (shows social_id, comment_counter, text).
 
 ## Step 4 - Fetch ALL comments
-GET `{DSN}/api/v1/posts/{social_id}/comments` with query `account_id`, `limit=100`, `sort_by=MOST_RECENT`.
-- Pagination: if response `cursor` is non-null, call again with `cursor=<value>` until null. Don't stop at page 1.
-- Replies: for every comment with `reply_counter > 0`, call same endpoint with `comment_id=<comment.id>` (also paginate).
-- URL-encode the social_id in the path (`urn%3Ali%3Aactivity%3A...`) if the raw one errors.
+`curl -sS "$B/posts/<url-encoded social_id>/comments?account_id=$A&limit=100" ...` (encode `:` as `%3A`).
+- Pagination: while `cursor` is non-null, call again with `&cursor=<value>`.
+- Replies: for each comment with `reply_counter > 0`, call again with `&comment_id=<comment id>` (also paginate).
+- Use a short python script in the same `device_bash` call to loop and collect.
 
-Fields to keep per comment: id, parent comment id (for replies), author, author_details.headline, author_details.profile_url, network_distance, date, text, reaction_counter, reply_counter.
+Keep per comment: id, parent_comment_id (replies), author, author_details.headline, author_details.profile_url, network_distance, date, text, reaction_counter, reply_counter.
 
 ## Step 5 - Output
-- Summary in chat: total comments + replies, top commenters, quick themes/questions asked.
-- Full data as a CSV (one row per comment/reply) delivered as a file; if the user's folder is connected, save it there as `linkedin_comments_<post-id>_<date>.csv`.
-- Do not invent or fill missing fields - leave blank.
+- Chat summary: total comments + replies, top commenters, main themes/questions.
+- CSV (one row per comment/reply) written into the user's connected folder as `linkedin_comments_<activity-id>_<YYYY-MM-DD>.csv`; tell them the file name.
+- Never invent missing fields - leave blank.
 
 ## Errors
-- 503 `no_client_session` -> wrong DSN.
-- 401 -> bad/missing API key, or LinkedIn account disconnected in Unipile (reconnect in dashboard).
-- 403 `account_restricted` / `action_required` -> the user must open LinkedIn in browser and resolve.
-- Fresh post with 0 comments is normal - offer to re-check later (can set a scheduled task).
+- `403 from proxy` -> Unipile domain not allowed in Claude settings.
+- 401 `invalid_credentials` -> wrong key, or key and DSN from different Unipile workspaces.
+- 401 `disconnected_account` -> reconnect that LinkedIn account in the Unipile dashboard.
+- 403 `account_restricted` / `action_required` -> the account owner must open LinkedIn and resolve it.
+- New post with 0 comments is normal - offer to re-check later.
