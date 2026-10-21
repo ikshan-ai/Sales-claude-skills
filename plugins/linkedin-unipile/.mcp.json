@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "Unipile": {
+      "type": "http",
+      "url": "https://developer.unipile.com/mcp?branch=v1.0"
+    }
+  }
+}

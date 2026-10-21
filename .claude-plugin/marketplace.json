@@ -1,0 +1,13 @@
+{
+  "name": "sales-claude-skills",
+  "owner": { "name": "Rohit" },
+  "metadata": { "description": "Rohit's Claude plugins and skills" },
+  "plugins": [
+    {
+      "name": "linkedin-unipile",
+      "source": "./plugins/linkedin-unipile",
+      "description": "Publish LinkedIn posts and fetch all comments and replies through Unipile.",
+      "version": "0.1.0"
+    }
+  ]
+}
