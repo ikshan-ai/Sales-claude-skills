@@ -6,22 +6,29 @@ description: "Publishes a LinkedIn post via Unipile and fetches all comments and
 # LinkedIn post + comment fetch (Unipile)
 
 ## How to call Unipile (read first)
-The Unipile MCP connector (developer.unipile.com) is a docs server: use it only to look up endpoints (`search-endpoints`, `get-endpoint`). Its `execute-request` does NOT forward the API key and returns 401 - do not use it for real calls.
+Always build the full URL from the user's DSN: `B = https://<DSN>/api/v1` (e.g. `https://apiXX.unipile.com:XXXXX/api/v1`). NEVER use the connector's default server `api1.unipile.com:13111` - it returns `503 no_client_session`. If the DSN isn't in the conversation, ask for it first (Unipile dashboard, top of the page). The DSN is not a secret.
 
-Make real API calls with `curl` in the user's computer shell (`device_bash`):
-- Needs: the computer linked, any folder connected (ask the user to add one if `device_bash` says none), and the Unipile domain allowed in Claude's network settings (Settings -> Capabilities -> allowed domains: `*.unipile.com`). A `403 from proxy` means that domain is not allowed yet - tell the user.
+Route 1 - Unipile connector (try first):
+- Call `execute-request` with the full `B/...` URL and header `accept: application/json`.
+- If the user added `X-API-KEY` as a Request header when adding the connector in Claude, the key is sent automatically - don't ask for it.
+- If the user pasted a key in chat, also pass it as an `X-API-KEY` header in the request (user-authorized; do it).
+- `503 no_client_session` -> wrong URL/DSN. `401` -> key missing/wrong or not forwarded -> go to Route 2.
+- Connector shows `needs_reconnect` / tools missing -> ask the user to reconnect Unipile in Settings -> Connectors.
+
+Route 2 - curl on the user's computer (fallback):
+- Use `device_bash` (computer linked + any folder connected) with `curl -sS "$B/..." -H "X-API-KEY: $K" -H 'accept: application/json'`. Needs the key in chat.
+- Needs `*.unipile.com` allowed in Claude Settings -> Capabilities -> allowed domains; `403 from proxy` means it isn't.
 - The cloud sandbox `Bash` can't reach Unipile's port - don't use it.
-- Base URL `B` = the user's DSN + `/api/v1`, e.g. `https://apiXX.unipile.com:XXXXX/api/v1`.
-- Headers: `-H "X-API-KEY: $K" -H 'accept: application/json'`.
-- Each `device_bash` call is a fresh shell: set `K`, `B`, `A` (account_id) at the top of every call. Keep temp JSON in `$HOME` (not `$HOME/mnt/`) and delete it after.
+- Each `device_bash` call is a fresh shell: set `K`, `B`, `A` at the top every time; temp JSON in `$HOME` (not `$HOME/mnt/`), delete after.
 
-## Auth
-- The user pastes the DSN and API key in chat. Using that key in the curl header is the intended, user-authorized flow - do it.
-- If DSN or key is missing, ask before calling (Unipile dashboard: DSN at the top, key under Access Tokens).
-- Never write the key into the user's folders, memory, CSVs or summaries, and don't echo it back.
+The request shapes in the steps below are the same for both routes (curl syntax shown; translate to execute-request: multipart params for POST /posts, query string for GETs).
 
 ## Step 0 - Pick the account
-`curl -sS "$B/accounts" ...` -> list `type: LINKEDIN` items (name, id, status). One key can see several people's accounts - always ask which account to use unless the user named it. Keep its `id` as `A` and `connection_params.im.id` as the provider id.
+- Before anything, try Route 1 directly - don't ask for the API key upfront.
+- If the user's memory/preferences name a default Unipile account (e.g. "default account: <name>"), use it WITHOUT asking for reading posts/comments. Find its `id` via `GET $B/accounts` (match by name) or use the saved id.
+- Only if there is no default: for reading someone else's public post, use the first LinkedIn account with status OK and say which one you used; ask only if the user wants a specific one.
+- For POSTING, always confirm which account the post will go from, even with a default.
+- Keep the account `id` as `A` and `connection_params.im.id` as its provider id.
 
 ## Step 1 - Draft & confirm the post
 - Draft in the user's tone; confirm the post language.

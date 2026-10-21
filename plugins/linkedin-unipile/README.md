@@ -7,10 +7,12 @@ Publish LinkedIn posts and fetch every comment and reply on a post, using Unipil
 2. Your Unipile **DSN** (shown at the top of the dashboard, e.g. `apiXX.unipile.com:XXXXX`).
 3. A Unipile **API key** (dashboard -> Access Tokens -> Generate).
 
-The plugin adds the Unipile connector (used for endpoint docs). Real API calls run as `curl` on your computer, so:
-- link your computer to Claude and connect any folder,
-- allow `*.unipile.com` in Claude Settings -> Capabilities -> allowed domains,
-- paste your DSN and API key in chat when asked. Never commit your API key to this repo.
+Setup:
+1. In Claude, Settings -> Connectors -> Unipile: when adding it, choose **No sign-in** and add a Request header `X-API-KEY` = your Unipile API key.
+2. In chat, tell Claude your DSN once, e.g. "my Unipile DSN is https://apiXX.unipile.com:XXXXX/api/v1".
+3. Fallback if the connector returns 401: link your computer, connect any folder, allow `*.unipile.com` in Settings -> Capabilities, and paste the key in chat - Claude will use curl.
+
+Never commit your API key to this repo.
 
 ## Usage
 - "Post this on LinkedIn: ..." - Claude drafts, shows the final text, and posts only after you confirm.
